@@ -1,0 +1,116 @@
+{
+    "products": [
+        {
+            "id": "1",
+            "name": "Coke",
+            "priceCents": 199,
+            "quantity": 10,
+            "category": "drink"
+        },
+        {
+            "id": "2",
+            "name": "Pepsi",
+            "priceCents": 189,
+            "quantity": 15,
+            "category": "drink"
+        },
+        {
+            "id": "3",
+            "name": "Water",
+            "priceCents": 99,
+            "quantity": 6,
+            "category": "drink"
+        },
+        {
+            "id": "4",
+            "name": "Orange Juice",
+            "priceCents": 249,
+            "quantity": 8,
+            "category": "drink"
+        },
+        {
+            "id": "5",
+            "name": "Lemonade",
+            "priceCents": 179,
+            "quantity": 10,
+            "category": "drink"
+        },
+        {
+            "id": "6",
+            "name": "Iced Tea",
+            "priceCents": 229,
+            "quantity": 12,
+            "category": "drink"
+        },
+        {
+            "id": "7",
+            "name": "Chips",
+            "priceCents": 219,
+            "quantity": 15,
+            "category": "snack"
+        },
+        {
+            "id": "8",
+            "name": "Pretzels",
+            "priceCents": 149,
+            "quantity": 15,
+            "category": "snack"
+        },
+        {
+            "id": "9",
+            "name": "Popcorn",
+            "priceCents": 209,
+            "quantity": 15,
+            "category": "snack"
+        },
+        {
+            "id": "10",
+            "name": "Nuts",
+            "priceCents": 279,
+            "quantity": 15,
+            "category": "snack"
+        },
+        {
+            "id": "11",
+            "name": "Trail Mix",
+            "priceCents": 299,
+            "quantity": 15,
+            "category": "snack"
+        },
+        {
+            "id": "12",
+            "name": "Granola Bar",
+            "priceCents": 129,
+            "quantity": 15,
+            "category": "snack"
+        },
+        {
+            "id": "13",
+            "name": "Fruit Snacks",
+            "priceCents": 169,
+            "quantity": 15,
+            "category": "snack"
+        },
+        {
+            "id": "14",
+            "name": "Beef Jerky",
+            "priceCents": 349,
+            "quantity": 15,
+            "category": "snack"
+        },
+        {
+            "id": "15",
+            "name": "Rice Cakes",
+            "priceCents": 159,
+            "quantity": 15,
+            "category": "snack"
+        },
+        {
+            "id": "16",
+            "name": "Crackers",
+            "priceCents": 139,
+            "quantity": 15,
+            "category": "snack"
+        }
+    ]
+}

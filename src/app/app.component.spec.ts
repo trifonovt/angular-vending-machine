@@ -1,29 +1,150 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { of, Subject, throwError } from 'rxjs';
 import { AppComponent } from './app.component';
+import { IProduct } from './models/IProduct';
+import { ProductsService } from './services/products.service';
 
 describe('AppComponent', () => {
+  let fixture: ComponentFixture<AppComponent>;
+  let element: HTMLElement;
+  let productsService: jasmine.SpyObj<ProductsService>;
+  let products: IProduct[];
+
+  function button(selector: string): HTMLButtonElement {
+    const result = element.querySelector<HTMLButtonElement>(selector);
+    if (!result) {
+      throw new Error(`Missing button: ${selector}`);
+    }
+    return result;
+  }
+
+  function click(selector: string): void {
+    button(selector).click();
+    fixture.detectChanges();
+  }
+
   beforeEach(async () => {
+    products = [
+      { id: '1', name: 'Coke', priceCents: 199, quantity: 2, category: 'drink' },
+      { id: '2', name: 'Chips', priceCents: 219, quantity: 1, category: 'snack' },
+      { id: '3', name: 'Water', priceCents: 99, quantity: 0, category: 'drink' },
+    ];
+    productsService = jasmine.createSpyObj<ProductsService>('ProductsService', ['getProducts']);
+    productsService.getProducts.and.returnValue(of(products));
+
     await TestBed.configureTestingModule({
       imports: [AppComponent],
+      providers: [provideRouter([]), { provide: ProductsService, useValue: productsService }],
     }).compileComponents();
+
+    fixture = TestBed.createComponent(AppComponent);
+    element = fixture.nativeElement;
   });
 
-  it('should create the app', () => {
-    const fixture = TestBed.createComponent(AppComponent);
-    const app = fixture.componentInstance;
-    expect(app).toBeTruthy();
-  });
+  it('loads products once and renders their names, prices and stock', () => {
+    expect(productsService.getProducts).not.toHaveBeenCalled();
 
-  it(`should have the 'angular-vending-machine' title`, () => {
-    const fixture = TestBed.createComponent(AppComponent);
-    const app = fixture.componentInstance;
-    expect(app.title).toEqual('angular-vending-machine');
-  });
-
-  it('should render title', () => {
-    const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, angular-vending-machine');
+    fixture.detectChanges();
+
+    expect(productsService.getProducts).toHaveBeenCalledTimes(1);
+    expect(Array.from(element.querySelectorAll('.product-name'), item => item.textContent?.trim()))
+      .toEqual(['Coke', 'Chips', 'Water']);
+    expect(button('[data-product-id="1"]').textContent).toContain('€1.99');
+    expect(button('[data-product-id="1"]').textContent).toContain('2 available');
+    expect(button('[data-product-id="3"]').disabled).toBeTrue();
+    expect(button('[data-product-id="3"]').textContent).toContain('Sold out');
+  });
+
+  it('enables coins after selection and locks other products until cancellation', () => {
+    fixture.detectChanges();
+    expect(button('[data-coin-cents="100"]').disabled).toBeTrue();
+
+    click('[data-product-id="1"]');
+
+    expect(button('[data-product-id="1"]').getAttribute('aria-pressed')).toBe('true');
+    expect(button('[data-product-id="2"]').disabled).toBeTrue();
+    expect(button('[data-coin-cents="100"]').disabled).toBeFalse();
+
+    click('.cancel');
+
+    expect(button('[data-product-id="2"]').disabled).toBeFalse();
+    expect(button('[data-coin-cents="100"]').disabled).toBeTrue();
+  });
+
+  it('shows payment progress, dispenses automatically and renders change coins', () => {
+    fixture.detectChanges();
+    click('[data-product-id="1"]');
+    click('[data-coin-cents="100"]');
+
+    expect(element.querySelector('.credit-value')?.textContent).toContain('€1.00');
+    expect(element.querySelector('.amount-due')?.textContent).toContain('€0.99');
+    expect(element.querySelector('.receipt')).toBeNull();
+
+    click('[data-coin-cents="100"]');
+
+    expect(button('[data-product-id="1"]').textContent).toContain('1 available');
+    expect(element.querySelector('.receipt')?.textContent).toContain('Enjoy your Coke!');
+    expect(element.querySelector('.receipt')?.textContent).toContain('Change: €0.01');
+    expect(element.querySelector('.returned-coins')?.textContent).toContain('€0.01');
+    expect(element.querySelector('.credit-value')?.textContent).toContain('€0.00');
+    expect(button('[data-coin-cents="100"]').disabled).toBeTrue();
+
+    click('[data-product-id="2"]');
+    expect(element.querySelector('.receipt')).toBeNull();
+  });
+
+  it('returns inserted denominations on cancellation without reducing stock', () => {
+    fixture.detectChanges();
+    click('[data-product-id="1"]');
+    click('[data-coin-cents="50"]');
+    click('[data-coin-cents="20"]');
+    click('.cancel');
+
+    expect(element.querySelector('.receipt')?.textContent).toContain('Purchase cancelled');
+    expect(element.querySelector('.receipt')?.textContent).toContain('Refund: €0.70');
+    expect(Array.from(element.querySelectorAll('.returned-coins span'), coin => coin.textContent?.trim()))
+      .toEqual(['€0.50', '€0.20']);
+    expect(button('[data-product-id="1"]').textContent).toContain('2 available');
+    expect(button('.cancel').disabled).toBeTrue();
+  });
+
+  it('shows the loading message until the product request completes', () => {
+    const response = new Subject<IProduct[]>();
+    productsService.getProducts.and.returnValue(response);
+
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Loading products...');
+
+    response.next(products);
+    response.complete();
+    fixture.detectChanges();
+
+    expect(element.textContent).not.toContain('Loading products...');
+    expect(element.querySelectorAll('.product').length).toBe(3);
+  });
+
+  it('shows a request error and allows a successful retry', () => {
+    productsService.getProducts.and.returnValue(throwError(() => new Error('Products unavailable')));
+    fixture.detectChanges();
+
+    expect(element.querySelector('[role="alert"]')?.textContent).toContain('Products unavailable');
+    expect(element.textContent).not.toContain('Loading products...');
+
+    productsService.getProducts.and.returnValue(of(products));
+    click('.error button');
+
+    expect(element.querySelector('[role="alert"]')).toBeNull();
+    expect(element.querySelectorAll('.product').length).toBe(3);
+  });
+
+  it('shows an empty inventory without enabling coins', () => {
+    productsService.getProducts.and.returnValue(of([]));
+    fixture.detectChanges();
+
+    expect(element.textContent).toContain('No products available.');
+    expect(element.querySelectorAll('.product').length).toBe(0);
+    expect(button('[data-coin-cents="100"]').disabled).toBeTrue();
   });
 });
