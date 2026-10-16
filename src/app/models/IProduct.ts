@@ -5,3 +5,5 @@ export interface IProduct {
     quantity: number;
     category: string;
 }
+
+export type ProductInput = Omit<IProduct, 'id'>;

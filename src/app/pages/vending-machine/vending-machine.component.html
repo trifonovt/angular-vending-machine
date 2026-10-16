@@ -1,0 +1,112 @@
+<main>
+  <header>
+    <div class="heading">
+      <h1>Vending machine</h1>
+      <a class="manage" routerLink="/manage-products">Manage Products</a>
+    </div>
+    <p>Choose a product, then insert coins. Your purchase completes as soon as you have paid enough.</p>
+  </header>
+
+  <div class="machine">
+    <section aria-labelledby="products-heading">
+      <h2 id="products-heading">1. Choose a product</h2>
+      @if (store.isLoading()) {
+        <p role="status">Loading products...</p>
+      }
+      @if (store.error()) {
+        <div class="error" role="alert">
+          <p>{{ store.error() }}</p>
+          <button type="button" (click)="store.loadProducts()">Try again</button>
+        </div>
+      }
+      @if (!store.isLoading() && !store.error() && store.products().length === 0) {
+        <p>No products available.</p>
+      }
+      <ul class="products">
+        @for (product of store.products(); track product.id) {
+          <li>
+            <button
+              type="button"
+              class="product"
+              [attr.data-product-id]="product.id"
+              [attr.aria-pressed]="store.selectedProductId() === product.id"
+              [disabled]="store.isLoading() || product.quantity === 0 || (store.selectedProductId() !== null && store.selectedProductId() !== product.id)"
+              (click)="store.selectProduct(product.id)">
+              <span class="category">{{ product.category }}</span>
+              <strong class="product-name">{{ product.name }}</strong>
+              <span class="price">{{ product.priceCents / 100 | currency:'EUR' }}</span>
+              <span class="stock">{{ product.quantity === 0 ? 'Sold out' : product.quantity + ' available' }}</span>
+              @if (store.selectedProductId() === product.id) {
+                <span class="selected-label">Selected</span>
+              }
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+
+    <aside aria-labelledby="payment-heading">
+      <h2 id="payment-heading">2. Insert coins</h2>
+      @if (store.selectedProduct(); as product) {
+        <p>Selected: <strong>{{ product.name }}</strong></p>
+        <p class="hint">Other products stay locked until you finish or cancel.</p>
+      } @else {
+        <p class="hint">Select an available product to enable the coins.</p>
+      }
+
+      <dl class="balance" aria-live="polite">
+        <div><dt>Inserted</dt><dd class="credit-value">{{ store.creditCents() / 100 | currency:'EUR' }}</dd></div>
+        <div><dt>Still to pay</dt><dd class="amount-due">{{ store.amountDueCents() / 100 | currency:'EUR' }}</dd></div>
+      </dl>
+
+      <div class="coins" aria-label="Accepted euro coins">
+        @for (coin of acceptedCoins; track coin) {
+          <button
+            type="button"
+            [attr.data-coin-cents]="coin"
+            [attr.aria-label]="'Insert ' + (coin / 100 | currency:'EUR')"
+            [disabled]="store.selectedProductId() === null || store.isLoading()"
+            (click)="store.insertCoin(coin)">
+            {{ coin / 100 | currency:'EUR' }}
+          </button>
+        }
+      </div>
+      <p class="hint">Any extra money is returned as coins automatically.</p>
+      <button
+        type="button"
+        class="cancel"
+        [disabled]="store.selectedProductId() === null"
+        (click)="store.cancelPurchase()">
+        Cancel and refund
+      </button>
+
+      @if (store.transactionError()) {
+        <p class="error" role="alert">{{ store.transactionError() }}</p>
+      }
+
+      @if (store.lastTransaction(); as transaction) {
+        <section class="receipt" role="status" aria-live="polite" aria-label="Transaction result">
+          @if (transaction.kind === 'purchase') {
+            <h3>Enjoy your {{ transaction.productName }}!</h3>
+            <p>Price: {{ transaction.priceCents / 100 | currency:'EUR' }}</p>
+            <p>Paid: {{ transaction.paidCents / 100 | currency:'EUR' }}</p>
+            <p><strong>Change: {{ transaction.returnedCents / 100 | currency:'EUR' }}</strong></p>
+          } @else {
+            <h3>Purchase cancelled</h3>
+            <p><strong>Refund: {{ transaction.returnedCents / 100 | currency:'EUR' }}</strong></p>
+          }
+          @if (transaction.returnedCoins.length > 0) {
+            <p>Collect your coins:</p>
+            <div class="returned-coins" aria-label="Returned coins">
+              @for (coin of transaction.returnedCoins; track $index) {
+                <span>{{ coin / 100 | currency:'EUR' }}</span>
+              }
+            </div>
+          } @else {
+            <p>No coins to return.</p>
+          }
+        </section>
+      }
+    </aside>
+  </div>
+</main>

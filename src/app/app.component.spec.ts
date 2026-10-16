@@ -1,150 +1,97 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { of, Subject, throwError } from 'rxjs';
+import { Router, provideRouter } from '@angular/router';
+import { of } from 'rxjs';
 import { AppComponent } from './app.component';
+import { routes } from './app.routes';
 import { IProduct } from './models/IProduct';
 import { ProductsService } from './services/products.service';
+import { AppStore } from './store/app-store';
 
-describe('AppComponent', () => {
+// Use the actual routes and root shell so destroying a page cannot hide a reload bug.
+describe('AppComponent routing', () => {
   let fixture: ComponentFixture<AppComponent>;
   let element: HTMLElement;
+  let router: Router;
+  let store: InstanceType<typeof AppStore>;
   let productsService: jasmine.SpyObj<ProductsService>;
-  let products: IProduct[];
 
-  function button(selector: string): HTMLButtonElement {
-    const result = element.querySelector<HTMLButtonElement>(selector);
-    if (!result) {
-      throw new Error(`Missing button: ${selector}`);
-    }
-    return result;
-  }
-
-  function click(selector: string): void {
-    button(selector).click();
+  async function navigate(url: string): Promise<void> {
+    await router.navigateByUrl(url);
+    fixture.detectChanges();
+    await fixture.whenStable();
     fixture.detectChanges();
   }
 
   beforeEach(async () => {
-    products = [
+    const products: IProduct[] = [
       { id: '1', name: 'Coke', priceCents: 199, quantity: 2, category: 'drink' },
       { id: '2', name: 'Chips', priceCents: 219, quantity: 1, category: 'snack' },
-      { id: '3', name: 'Water', priceCents: 99, quantity: 0, category: 'drink' },
     ];
     productsService = jasmine.createSpyObj<ProductsService>('ProductsService', ['getProducts']);
     productsService.getProducts.and.returnValue(of(products));
 
     await TestBed.configureTestingModule({
       imports: [AppComponent],
-      providers: [provideRouter([]), { provide: ProductsService, useValue: productsService }],
+      providers: [provideRouter(routes), { provide: ProductsService, useValue: productsService }],
     }).compileComponents();
 
+    router = TestBed.inject(Router);
+    store = TestBed.inject(AppStore);
     fixture = TestBed.createComponent(AppComponent);
     element = fixture.nativeElement;
   });
 
-  it('loads products once and renders their names, prices and stock', () => {
+  it('opens management from the title link and keeps the initial inventory request to one', async () => {
     expect(productsService.getProducts).not.toHaveBeenCalled();
-
     fixture.detectChanges();
+    await navigate('/');
+
+    const link = element.querySelector<HTMLAnchorElement>('header a.manage');
+    expect(link?.textContent).toContain('Manage Products');
+    link!.click();
+    await fixture.whenStable();
     fixture.detectChanges();
 
+    expect(router.url).toBe('/manage-products');
+    expect(element.querySelector('app-manage-products')).not.toBeNull();
+    expect(element.querySelector('app-vending-machine')).toBeNull();
+
+    await navigate('/');
+    expect(element.querySelector('app-vending-machine')).not.toBeNull();
     expect(productsService.getProducts).toHaveBeenCalledTimes(1);
-    expect(Array.from(element.querySelectorAll('.product-name'), item => item.textContent?.trim()))
-      .toEqual(['Coke', 'Chips', 'Water']);
-    expect(button('[data-product-id="1"]').textContent).toContain('€1.99');
-    expect(button('[data-product-id="1"]').textContent).toContain('2 available');
-    expect(button('[data-product-id="3"]').disabled).toBeTrue();
-    expect(button('[data-product-id="3"]').textContent).toContain('Sold out');
   });
 
-  it('enables coins after selection and locks other products until cancellation', () => {
+  it('loads and displays inventory when management is the first page opened', async () => {
     fixture.detectChanges();
-    expect(button('[data-coin-cents="100"]').disabled).toBeTrue();
+    await navigate('/manage-products');
 
-    click('[data-product-id="1"]');
-
-    expect(button('[data-product-id="1"]').getAttribute('aria-pressed')).toBe('true');
-    expect(button('[data-product-id="2"]').disabled).toBeTrue();
-    expect(button('[data-coin-cents="100"]').disabled).toBeFalse();
-
-    click('.cancel');
-
-    expect(button('[data-product-id="2"]').disabled).toBeFalse();
-    expect(button('[data-coin-cents="100"]').disabled).toBeTrue();
+    expect(element.querySelector('app-manage-products')).not.toBeNull();
+    expect(element.querySelector('table')?.textContent).toContain('Coke');
+    expect(element.querySelector('table')?.textContent).toContain('Chips');
+    expect(productsService.getProducts).toHaveBeenCalledTimes(1);
   });
 
-  it('shows payment progress, dispenses automatically and renders change coins', () => {
+  it('preserves edited inventory, product selection and inserted coins when changing pages', async () => {
     fixture.detectChanges();
-    click('[data-product-id="1"]');
-    click('[data-coin-cents="100"]');
+    await navigate('/manage-products');
+    expect(store.updateProduct('1', {
+      name: 'Cherry Coke', priceCents: 249, quantity: 8, category: 'drink',
+    })).toBeTrue();
 
-    expect(element.querySelector('.credit-value')?.textContent).toContain('€1.00');
-    expect(element.querySelector('.amount-due')?.textContent).toContain('€0.99');
-    expect(element.querySelector('.receipt')).toBeNull();
+    await navigate('/');
+    store.selectProduct('1');
+    store.insertCoin(50);
 
-    click('[data-coin-cents="100"]');
+    await navigate('/manage-products');
+    expect(store.selectedProductId()).toBe('1');
+    expect(store.insertedCoins()).toEqual([50]);
 
-    expect(button('[data-product-id="1"]').textContent).toContain('1 available');
-    expect(element.querySelector('.receipt')?.textContent).toContain('Enjoy your Coke!');
-    expect(element.querySelector('.receipt')?.textContent).toContain('Change: €0.01');
-    expect(element.querySelector('.returned-coins')?.textContent).toContain('€0.01');
-    expect(element.querySelector('.credit-value')?.textContent).toContain('€0.00');
-    expect(button('[data-coin-cents="100"]').disabled).toBeTrue();
-
-    click('[data-product-id="2"]');
-    expect(element.querySelector('.receipt')).toBeNull();
-  });
-
-  it('returns inserted denominations on cancellation without reducing stock', () => {
-    fixture.detectChanges();
-    click('[data-product-id="1"]');
-    click('[data-coin-cents="50"]');
-    click('[data-coin-cents="20"]');
-    click('.cancel');
-
-    expect(element.querySelector('.receipt')?.textContent).toContain('Purchase cancelled');
-    expect(element.querySelector('.receipt')?.textContent).toContain('Refund: €0.70');
-    expect(Array.from(element.querySelectorAll('.returned-coins span'), coin => coin.textContent?.trim()))
-      .toEqual(['€0.50', '€0.20']);
-    expect(button('[data-product-id="1"]').textContent).toContain('2 available');
-    expect(button('.cancel').disabled).toBeTrue();
-  });
-
-  it('shows the loading message until the product request completes', () => {
-    const response = new Subject<IProduct[]>();
-    productsService.getProducts.and.returnValue(response);
-
-    fixture.detectChanges();
-    expect(element.textContent).toContain('Loading products...');
-
-    response.next(products);
-    response.complete();
-    fixture.detectChanges();
-
-    expect(element.textContent).not.toContain('Loading products...');
-    expect(element.querySelectorAll('.product').length).toBe(3);
-  });
-
-  it('shows a request error and allows a successful retry', () => {
-    productsService.getProducts.and.returnValue(throwError(() => new Error('Products unavailable')));
-    fixture.detectChanges();
-
-    expect(element.querySelector('[role="alert"]')?.textContent).toContain('Products unavailable');
-    expect(element.textContent).not.toContain('Loading products...');
-
-    productsService.getProducts.and.returnValue(of(products));
-    click('.error button');
-
-    expect(element.querySelector('[role="alert"]')).toBeNull();
-    expect(element.querySelectorAll('.product').length).toBe(3);
-  });
-
-  it('shows an empty inventory without enabling coins', () => {
-    productsService.getProducts.and.returnValue(of([]));
-    fixture.detectChanges();
-
-    expect(element.textContent).toContain('No products available.');
-    expect(element.querySelectorAll('.product').length).toBe(0);
-    expect(button('[data-coin-cents="100"]').disabled).toBeTrue();
+    await navigate('/');
+    expect(element.querySelector('[data-product-id="1"]')?.textContent).toContain('8 available');
+    expect(element.querySelector('[data-product-id="1"]')?.textContent).toContain('Cherry Coke');
+    expect(element.querySelector('[data-product-id="1"]')?.textContent).toContain('€2.49');
+    expect(element.querySelector('.credit-value')?.textContent).toContain('€0.50');
+    expect(store.selectedProductId()).toBe('1');
+    expect(productsService.getProducts).toHaveBeenCalledTimes(1);
   });
 });

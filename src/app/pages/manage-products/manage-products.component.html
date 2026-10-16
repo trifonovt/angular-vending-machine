@@ -1,0 +1,99 @@
+<main>
+  <header>
+    <h1>Manage products</h1>
+    <a routerLink="/">Back to vending machine</a>
+  </header>
+  <p class="hint">Add, edit or remove products. Changes last until you refresh the page. Each product can hold up to 15 items and must have its own price.</p>
+
+  @if (store.isLoading()) {
+    <p role="status">Loading products...</p>
+  }
+  @if (store.error()) {
+    <div class="error" role="alert">
+      <p>{{ store.error() }}</p>
+      <button type="button" (click)="store.loadProducts()">Try again</button>
+    </div>
+  }
+  @if (store.selectedProductId() !== null) {
+    <p class="notice" role="status">A purchase is in progress. <a routerLink="/">Finish or cancel it at the vending machine</a> before changing products. Your inserted coins are still available.</p>
+  }
+
+  <p class="success" role="status">{{ status() }}</p>
+  @if (store.productError()) {
+    <p #errorMessage class="error" role="alert" tabindex="-1">{{ store.productError() }}</p>
+  }
+  <button #addButton class="primary" type="button" [disabled]="!store.canManageProducts()" (click)="add()">Add product</button>
+
+  @if (editorOpen()) {
+    <section class="editor" aria-labelledby="editor-heading">
+      <h2 id="editor-heading">{{ editingId() === null ? 'Add product' : 'Edit product' }}</h2>
+      <form [formGroup]="form" (ngSubmit)="save()" novalidate>
+        <fieldset [disabled]="!store.canManageProducts()">
+          <legend class="sr-only">Product details</legend>
+          <div>
+            <label for="product-name">Name</label>
+            <input #nameInput id="product-name" formControlName="name" required [attr.aria-invalid]="invalid('name')" [attr.aria-describedby]="invalid('name') ? 'name-error' : null">
+            @if (invalid('name')) { <p id="name-error" class="error">Enter a product name.</p> }
+          </div>
+          <div>
+            <label for="product-category">Category</label>
+            <input id="product-category" formControlName="category" required [attr.aria-invalid]="invalid('category')" [attr.aria-describedby]="invalid('category') ? 'category-error' : null">
+            @if (invalid('category')) { <p id="category-error" class="error">Enter a category.</p> }
+          </div>
+          <div>
+            <label for="product-price">Price (€)</label>
+            <input id="product-price" formControlName="price" type="text" inputmode="decimal" placeholder="1.99" required [attr.aria-invalid]="invalid('price')" [attr.aria-describedby]="invalid('price') ? 'price-help price-error' : 'price-help'">
+            <small id="price-help">Use a dot for decimals, for example 1.99.</small>
+            @if (invalid('price')) { <p id="price-error" class="error">Enter a positive price with at most two decimal places.</p> }
+          </div>
+          <div>
+            <label for="product-quantity">Quantity</label>
+            <input id="product-quantity" formControlName="quantity" type="number" min="0" max="15" step="1" required [attr.aria-invalid]="invalid('quantity')" [attr.aria-describedby]="invalid('quantity') ? 'quantity-error' : null">
+            @if (invalid('quantity')) { <p id="quantity-error" class="error">Enter a whole number from 0 to 15.</p> }
+          </div>
+        </fieldset>
+        <div class="actions">
+          <button class="primary" type="submit" [disabled]="!store.canManageProducts()">{{ editingId() === null ? 'Add product' : 'Save changes' }}</button>
+          <button type="button" (click)="cancelEdit()">Cancel</button>
+        </div>
+      </form>
+    </section>
+  }
+
+  @if (!store.isLoading() && !store.error() && store.products().length === 0) {
+    <p class="empty">No products yet. Add a product to stock the machine.</p>
+  }
+  @if (store.products().length > 0) {
+    <div class="table-scroll" role="region" aria-label="Product inventory" tabindex="0">
+      <table>
+        <caption class="sr-only">Product inventory and management actions</caption>
+        <thead><tr><th scope="col">Name</th><th scope="col">Category</th><th scope="col">Price</th><th scope="col">Quantity</th><th scope="col">Actions</th></tr></thead>
+        <tbody>
+          @for (product of store.products(); track product.id) {
+            <tr [attr.data-product-id]="product.id">
+              <th scope="row">{{ product.name }}</th>
+              <td>{{ product.category }}</td>
+              <td>{{ product.priceCents / 100 | currency:'EUR' }}</td>
+              <td>{{ product.quantity }} / 15</td>
+              <td>
+                <div class="actions">
+                  <button type="button" [disabled]="!store.canManageProducts()" [attr.aria-label]="'Edit ' + product.name" (click)="edit(product)">Edit</button>
+                  <button class="danger" type="button" [disabled]="!store.canManageProducts()" [attr.aria-label]="'Delete ' + product.name" (click)="askDelete(product)">Delete</button>
+                </div>
+              </td>
+            </tr>
+            @if (pendingDelete()?.id === product.id) {
+              <tr class="confirmation"><td colspan="5">
+                <p role="alert">Delete <strong>{{ product.name }}</strong> from the machine?</p>
+                <div class="actions">
+                  <button class="danger" type="button" [disabled]="!store.canManageProducts()" (click)="confirmDelete()">Confirm delete</button>
+                  <button type="button" (click)="cancelDelete()">Keep product</button>
+                </div>
+              </td></tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</main>
